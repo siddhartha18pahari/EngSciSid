@@ -1,0 +1,85 @@
+import math
+
+### Helper Functions
+def norm(vec):
+    '''Return the norm of a vector stored as a dictionary.'''
+    sum_of_squares = 0.0
+    for x in vec:
+        sum_of_squares += vec[x] * vec[x]
+    return math.sqrt(sum_of_squares)
+
+def cosine_similarity(vec1, vec2):
+    '''Returns the cosine similarity between the sparse vectors vec1 and vec2, stored as dictionaries.'''
+    dot_product = 0.0
+    for key in vec1:
+        if key in vec2:
+            dot_product += vec1[key] * vec2[key]
+    norm_product = norm(vec1) * norm(vec2)
+    return dot_product / norm_product if norm_product else 0
+
+def build_semantic_descriptors(sentences):
+    '''Builds a dictionary of semantic descriptors from a list of sentences.'''
+    descriptors = {}
+    for sentence in sentences:
+        unique_words = set(sentence)
+        for word in unique_words:
+            if word not in descriptors:
+                descriptors[word] = {}
+            for co_word in unique_words:
+                if co_word != word:
+                    descriptors[word][co_word] = descriptors[word].get(co_word, 0) + 1
+    return descriptors
+
+def build_semantic_descriptors_from_files(filenames):
+    '''Builds semantic descriptors from a list of file names.'''
+    all_sentences = []
+    for filename in filenames:
+        with open(filename, "r", encoding="latin1") as file:
+            text = file.read().lower()
+            text = text.replace("\n", " ").replace("\r", " ")
+            for punctuation in [".", "!", "?"]:
+                text = text.replace(punctuation, ".")
+            for punctuation in [",", "-", "--", ":", ";", "(", ")"]:
+                text = text.replace(punctuation, "")
+            sentences = text.split(".")
+            for sentence in sentences:
+                words = sentence.split()
+                if words:
+                    all_sentences.append(words)
+    return build_semantic_descriptors(all_sentences)
+
+def most_similar_word(word, choices, semantic_descriptors, similarity_fn):
+    '''Finds the most similar word to the given word from the choices.'''
+    max_similarity = -1
+    most_similar = None
+    word_semantic_descriptor = semantic_descriptors.get(word, {})
+
+    for choice in choices:
+        choice_semantic_descriptor = semantic_descriptors.get(choice, {})
+        if word_semantic_descriptor and choice_semantic_descriptor:
+            similarity = similarity_fn(word_semantic_descriptor, choice_semantic_descriptor)
+            if similarity > max_similarity:
+                max_similarity = similarity
+                most_similar = choice
+
+    return most_similar if most_similar is not None else choices[0]
+
+def run_similarity_test(filename, semantic_descriptors, similarity_fn):
+    '''Runs a similarity test from a given file.'''
+    correct = 0
+    total = 0
+    with open(filename, "r") as file:
+        for line in file:
+            parts = line.strip().split()
+            word = parts[0]
+            answer = parts[1]
+            choices = parts[2:]
+            if most_similar_word(word, choices, semantic_descriptors, similarity_fn) == answer:
+                correct += 1
+            total += 1
+    return (correct / total) * 100 if total > 0 else 0
+
+# Example usage
+if __name__ == "__main__":
+    filedict = build_semantic_descriptors_from_files(["wp.txt", 'sw.txt'])
+    print(run_similarity_test("test.txt", filedict, cosine_similarity), "% of tests correct")
