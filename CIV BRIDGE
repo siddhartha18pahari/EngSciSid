@@ -1,0 +1,332 @@
+clear; close all;
+%% 0. Initialize Parameters
+L = 1200; % Length of bridge (mm)
+n = 1200; % Discretize into 1 mm segments.
+x = linspace(0, L, n+1); % x-axis (mm)
+%% 1. SFD, BMD under train loading
+loadcase1 = [52 200/3; 228 200/3; 392 200/3; 568 200/3; 732 200/3; 908 200/3];
+loadcase2 = [52 200/3; 228 200/3; 392 200/3; 568 200/3; 732 90; 908 90];
+loadcase2pass4 = [52 91.67; 228 91.67; 392 91.67; 568 91.67; 732 124; 908 124];
+loadcase2passpoint75 = [52 112.61; 228 112.61; 392 112.61; 568 112.61; 732 149.77; 908 149.77];
+loadcase2pass1k = [52 151.52; 228 151.52; 392 151.52; 568 151.52; 732 196.97; 908 196.97];
+loadcase2pass1point125k = [52 168.92; 228 168.92; 392 168.92; 568 168.92; 732 224.66; 908 224.66];
+loadcase2pass1point15k = [52 172.67; 228 172.67; 392 172.67; 568 172.67; 732 229.65; 908 229.65];
+loadcase2pass1point25k = [52 187.69; 228 187.69; 392 187.69; 568 187.69; 732 249.62; 908 249.62];
+loading = loadcase1; % Choose which load case to use
+% Initialize arrays for maximum SFD and BMD
+maxSFD = zeros(1, n+1);
+maxBMD = zeros(1, n+1);
+% Initialize variables for FOS calculations
+% FOS_tens, FOS_comp, FOS_shear, FOS_glue, FOS_buck1, FOS_buck2, FOS_buck3, FOS_buckV
+% Loop through all possible train positions
+for shift = -loading(1,1):(L-loading(end, 1)) % Stops when right end of train reaches other end
+   % Initialize SFD and BMD for this train position
+   SFD = zeros(1, n+1);
+   BMD = zeros(1, n+1);
+  
+   % Calculate the position of the loads for this train position
+   currentLoadPositions = loading(:,1) + shift;
+  
+   % Filter out loads that are beyond the bridge length
+   validLoads = currentLoadPositions <= L;
+   currentLoadPositions = currentLoadPositions(validLoads);
+   currentLoadValues = loading(validLoads, 2);
+  
+   % Compute reactions assuming the train is uniformly distributed
+   reactR = sum(currentLoadPositions .* currentLoadValues) / L;
+   reactL = sum(currentLoadValues) - reactR;
+  
+   % Apply the left reaction to SFD
+   SFD(1:end) = SFD(1:end) + reactL;
+  
+   % Apply the loads
+   for i = 1:length(currentLoadPositions)
+       % Find the indices where the train load is applied
+       loadPos = find(x >= currentLoadPositions(i), 1);
+       SFD(loadPos:end) = SFD(loadPos:end) - currentLoadValues(i);
+   end
+  
+   % Calculate the BMD by integrating the SFD
+   for i = 1:n
+       BMD(i+1) = BMD(i) + (SFD(i) + SFD(i+1)) / 2 * (x(i+1) - x(i));
+   end
+  
+   % Update max SFD and BMD
+   maxSFD = max(maxSFD, abs(SFD));
+   maxBMD = max(maxBMD, abs(BMD));
+end
+figure;
+% Plot the SFD and BMD envelopes
+subplot(2,1,1);
+plot(x, maxSFD, 'r');
+title('Maximum Shear Force Diagram (SFD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Shear Force (N)');
+grid on;
+subplot(2,1,2);
+plot(x, maxBMD, 'g');
+title('Maximum Bending Moment Diagram (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (N*mm)');
+grid on;
+
+%% 2. Define Bridge Parameters
+% Assume all sections are rectangles
+% Parameters: in order from bottom to top, row = sectionwidth, sectionheight (assume centered)
+% Design 0
+design0 = [80, 1.27; 2.54, 72.46; 12.54, 1.27; 100, 1.27];
+glueposes0 = [0, 75]; % Heightwise location of all glue positions; the 0 is to prevent Matlab from treating as scalar
+% Design 1
+design1 = [80, 1.27; 2.54, 56.19; 10, 1.27; 110, 1.27];
+glueposes1 = [0, 58.73];
+% Design 2
+design2 = [80, 1.27; 2.54, 114.92; 10, 1.27; 110, 2.54];
+glueposes2 = [117.46, 118.73];
+% Design 3A (sides of Design 3)
+design3A = [80, 1.27; 2.54, 76.19; 10, 1.27; 110, 1.27];
+glueposes3A = [78.73, 0];
+% Design 3B (middle of Design 3)
+design3B = [2.54, 60; 80, 1.27; 2.54, 74.92; 10, 1.27; 110, 2.54];
+glueposes3B = [137.46, 138.73];
+% Design 4A (sides of Design 4)
+design4A = [80, 1.27; 20, 1.27; 2.54, 73.65; 20, 1.27; 110, 2.54];
+glueposes4A = [1.27, 77.46];
+% Design 4B (middle of Design 4)
+design4B = [2.54, 130; 20, 1.27; 110, 2.54];
+glueposes4B = [131.27, 132.54];
+% Design 5A (sides of Design 5)
+design5A = [80, 1.27; 20, 1.27; 5.08, 73.65; 20, 1.27; 110, 2.54];
+glueposes5A = [1.27, 77.46];
+% Design 5B (middle of Design 5)
+design5B = [2.54, 130; 20, 1.27; 110, 2.54];
+glueposes5B = [131.27, 132.54];
+geometry = design0;
+glueposes = glueposes0;
+side_index = find(geometry(:,2) == max(geometry(:,2))); % Side web is ASSUMED to be the highest part
+% Produce starting and ending y positions from height data
+y_starts = cumsum(geometry(:,2)) - geometry(:,2);
+geometry = cat(2, geometry, y_starts); % Combine with geometry array
+ytop = geometry(end, 3) + geometry(end, 2);
+ysidetop = geometry(side_index, 2) + geometry(side_index, 3);
+% Calculate max diaphragm spacing (WILL NEED TO CHANGE TO MORE PRECISE METHOD)
+diaphragm_spacing = 200;
+
+%% 3. Calculate Sectional Properties
+ybar = calculate_composite_centroid(geometry);
+I = calculate_I(geometry, ybar);
+% Statical moment Q (for glues and centroid)
+Qcent = calculate_composite_Q(create_subshape(geometry, 0, ybar), ybar);
+Qglues = zeros(1, length(glueposes));
+for i = 1:length(glueposes) % NOT USED; deviates from hand calculations
+   Qglues(i) = calculate_composite_Q(create_subshape(geometry, glueposes(i), ytop), ybar); % Q determined between (sectionstart, sectionend)
+end
+
+%% 4. Material and Thin Plate Buckling Capacities
+% Using material properties provided in the original document
+E = 4000; % Young's Modulus [MPa]
+mu = 0.2; % Poisson's Ratio
+% The cluster of quantities in front of all the thin plate buckling equations
+thinplatefactor = (pi^2 * E)/(12 * (1-mu^2)); % Will need to be multiplied by k
+% Tensile, compressive, and shear strengths without other overriding conditions
+sigma_t = 30; % Tensile Strength [MPa]
+sigma_c = 6; % Compressive Strength [MPa]
+tau_max = 4; % Shear Strength [MPa]
+tau_max_glue = 2; % Shear Strength of glue
+% Buckling capacities (top)
+top_thickness = geometry(end, 2); % Take thickness and breadth of topmost component
+top_breadth = 80 %geometry(end, 1); % NOTE: The geometry(end, 1) non-hardcoded version includes overhangs!
+sigma_buck_top = 4 * thinplatefactor * (top_thickness/top_breadth)^2; % Thin plate bucking (four sides restrained)
+% Buckling capacities (sides; may need to calculate for multiple shapes)
+side_thickness = geometry(side_index, 1)/2; % Assumes side_thickness is equally spread across 2 sides
+side_breadth = geometry(side_index, 2) - (ybar - geometry(side_index, 3)); % subtract until it is height above centroid
+sigma_buck_sides = 6 * thinplatefactor * (side_thickness/side_breadth)^2;
+% Shear buckling capacities (sides)
+tau_shear_sides = 5 * thinplatefactor * ((side_thickness/geometry(side_index, 2))^2 + (side_thickness/diaphragm_spacing)^2);
+
+%% 5. BM and SF Capacities corresponding to Material and Thin Plate Capacities
+% Reversing sigma = M*y/I,
+BMcap_t = 30 * I/ybar;
+BMcap_c_mat = sigma_c * I/(ytop-ybar);
+BMcap_c_buck = sigma_buck_top * I/(ytop-ybar);
+BMcap_csides_mat = sigma_c * I/(ysidetop-ybar);
+BMcap_csides_buck = sigma_buck_sides * I/(ysidetop-ybar);
+% Reversing tau = VQ/Ib,
+SFcap_sides_mat = (tau_max * I * side_thickness)/Qcent;
+SFcap_sides_buck = (tau_shear_sides * I * side_thickness)/Qcent;
+SFcap_glues = zeros(1, length(glueposes));
+for i = 1:length(SFcap_glues)
+   SFcap_glues(i) = (min(tau_max, tau_shear_sides) * I * side_thickness)/Qglues(i);
+end
+figure; % SF-related quantities
+subplot(1,2,1);
+plot(x, maxSFD);
+yline(SFcap_sides_mat, 'r')
+title('Matboard Material Shear Failure (SFD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Shear Force (N)');
+grid on;
+subplot(1,2,2);
+plot(x, maxSFD);
+yline(SFcap_sides_buck, 'r')
+title('Matboard Buckling Shear Failure (SFD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Shear Force (N)');
+grid on;
+figure; % BM-related quantities
+subplot(2,3,1);
+plot(x, maxBMD);
+yline(BMcap_csides_mat, 'g')
+title('Matboard Side Material Compression Failure (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (Nmm)');
+grid on;
+subplot(2,3,4);
+plot(x, maxBMD);
+yline(BMcap_csides_buck, 'g')
+title('Matboard Side Buckling Compression Failure (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (Nmm)');
+grid on;
+subplot(2,3,2);
+plot(x, maxBMD);
+yline(BMcap_c_mat, 'g')
+title('Matboard Top Material Compression Failure (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (Nmm)');
+grid on;
+subplot(2,3,5);
+plot(x, maxBMD);
+yline(BMcap_c_buck, 'g')
+title('Matboard Top Buckling Compression Failure (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (Nmm)');
+grid on;
+subplot(2,3,6);
+plot(x, maxBMD);
+yline(BMcap_t, 'g')
+title('Matboard Bottom Tension Failure (BMD)');
+xlabel('Distance along bridge (mm)');
+ylabel('Bending Moment (Nmm)');
+grid on;
+
+%% 6. FOS
+% Factors of Safety based on the applied stresses and material strengths
+stress_tens = max(maxBMD)*ybar/I;
+FOS_tens = sigma_t/stress_tens
+stress_comp = max(maxBMD)*(ytop-ybar)/I;
+FOS_comp_mat = sigma_c/stress_comp
+FOS_comp_buck = sigma_buck_top/stress_comp
+stress_comp_sides = max(maxBMD)*(ysidetop-ybar)/I;
+FOS_comp_sides_mat = sigma_c/stress_comp_sides
+FOS_comp_sides_buck = sigma_buck_sides/stress_comp_sides
+stress_shear_sides = (max(maxSFD)*Qcent)/(I*side_thickness);
+FOS_shear_sides_mat = tau_max/stress_shear_sides
+FOS_shear_sides_buck = tau_shear_sides/stress_shear_sides
+% The minimum factor of safety over the entire bridge
+minFOS = min([FOS_tens, FOS_comp_mat, FOS_comp_buck, FOS_comp_sides_mat, FOS_comp_sides_buck, FOS_shear_sides_mat, FOS_shear_sides_buck])
+
+%% 7. Min FOS and the failure load Pf
+% The failure load can be estimated based on the minimum FOS found
+FailureLoad = sum(loading(:,2)) * minFOS
+%% 8. Vfail and Mfail
+% The failure shear force and moment can be estimated based on FOS and the material capacities
+Vf_shear = min([SFcap_sides_mat, SFcap_sides_buck])
+Mf_tenscomp = min([BMcap_t, BMcap_c_buck, BMcap_c_mat, BMcap_csides_buck, BMcap_csides_mat])
+
+maxBM = max(maxBMD)
+maxSF = max(maxSFD)
+
+
+%% FUNCTIONS
+function y_bar = calculate_composite_centroid(rectangles)
+   % Calculates the y-coordinate of the centroid for a composite cross-section.
+   % rectangles: a matrix where each row represents a rectangle with [b, h, y_bottom]
+   % Initialize variables
+   total_area = 0;
+   y_bar = 0;
+   % Loop through each rectangle
+   for i = 1:size(rectangles, 1)
+       b = rectangles(i, 1); % width of the rectangle
+       h = rectangles(i, 2); % height of the rectangle
+       y_bottom = rectangles(i, 3); % bottom y-coordinate of the rectangle
+       % Calculate the area and centroid of the rectangle
+       A = b * h;
+       y_centroid = y_bottom + h / 2;
+       % Increment total area and weighted centroid
+       total_area = total_area + A;
+       y_bar = y_bar + (y_centroid * A);
+   end
+   % Divide the weighted centroid sum by the total area
+   y_bar = y_bar / total_area;
+end
+function I_total = calculate_I(rectangles, y_bar)
+   % Calculates the moment of inertia for a composite cross-section.
+   % rectangles: a matrix where each row represents a rectangle with [b, h, y_bottom]
+   % y_bar: y-coordinate of the composite centroid
+   % Initialize the total I
+   I_total = 0;
+   % Loop through each rectangle
+   for i = 1:size(rectangles, 1)
+       b = rectangles(i, 1); % width of the rectangle
+       h = rectangles(i, 2); % height of the rectangle
+       y_bottom = rectangles(i, 3); % bottom y-coordinate of the rectangle
+       % Calculate the distance from the centroid to y_bar
+       y_centroid = y_bottom + h / 2;
+       d = abs(y_centroid - y_bar);
+       % Calculate the area of the rectangle
+       A = b * h;
+       % Calculate the moment of inertia for the rectangle about its own centroid
+       I_centroid = (b * h^3) / 12;
+       % Use the parallel axis theorem to shift the moment of inertia to y_bar
+       I_total = I_total + I_centroid + A * d^2;
+   end
+end
+function Q = calculate_composite_Q(rectangles, y_ref)
+   % Calculates the first moment of area (Q) for a composite cross-section.
+   % rectangles: a matrix where each row represents a rectangle with [b, h, y_bottom]
+   % y_ref: y-coordinate of the reference axis (neutral axis)
+   % Initialize Q
+   Q = 0;
+   % Loop through each rectangle
+   for i = 1:size(rectangles, 1)
+       b = rectangles(i, 1); % width of the rectangle
+       h = rectangles(i, 2); % height of the rectangle
+       y_bottom = rectangles(i, 3); % bottom y-coordinate of the rectangle
+       % Calculate the area above or below the neutral axis
+       if y_bottom + h > y_ref
+           % The rectangle is partially or completely above the neutral axis
+           y_top = min(y_bottom + h, y_ref); % Top y-coordinate of the area of interest
+           A = b * (y_top - y_ref); % Area above the neutral axis
+           y_centroid = y_ref + (y_top - y_ref) / 2; % Centroid of the area of interest
+       else
+           % The rectangle is completely below the neutral axis
+           A = b * h; % Area of the entire rectangle
+           y_centroid = y_bottom + h / 2; % Centroid of the rectangle
+       end
+       % Increment Q
+       Q = Q + A * abs(y_centroid - y_ref);
+   end
+end
+function subshape = create_subshape(shapes, slicestart, sliceend)
+   % Create a vertical subsection of shapes between slicestart and sliceend.
+   % shapes: a matrix where each row represents a rectangle with [b, h, y_bottom]
+   % slicestart, sliceend: the start and end y-coordinates of the slice
+   % Initialize the subshape array
+   subshape = [];
+   % Process each shape
+   for i = 1:size(shapes, 1)
+       b = shapes(i, 1); % width of the rectangle
+       h = shapes(i, 2); % height of the rectangle
+       y_bottom = shapes(i, 3); % bottom y-coordinate of the rectangle
+       y_top = y_bottom + h; % top y-coordinate of the rectangle
+       % Check if the shape is within the slice
+       if y_top > slicestart && y_bottom < sliceend
+           % Adjust the bottom and/or top of the shape if necessary
+           new_bottom = max(y_bottom, slicestart);
+           new_top = min(y_top, sliceend);
+           % Add the modified shape to the subshape array
+           new_height = new_top - new_bottom;
+           subshape = [subshape; b, new_height, new_bottom];
+       end
+   end
+end
