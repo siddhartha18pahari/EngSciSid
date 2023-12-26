@@ -1,0 +1,65 @@
+from math import *
+import numpy as np
+import scipy.integrate
+import scipy.optimize
+import matplotlib.pyplot as plt
+
+g = 9.81
+M = 0.2  # mass of the lock
+Lm = 0.05  # center of mass of the lock
+L = 0.20
+
+def func(u, t):
+    mx, my, mz, fdx, fdy, vx, vy, vz, fvx, fvy = u
+    x = np.array([mx, my, mz])
+    fx = np.array([fdx, fdy, 0])
+    v = np.array([vx, vy, vz])
+    fv = np.array([fvx, fvy, 0])
+    a = np.array([0.0, 0.0, -g])
+    fa = np.array([0.0, 0.0, 0.0])
+
+    # air resistance
+    a -= 0.004 * np.linalg.norm(v) * v / M
+
+    # string constraint
+    L1 = np.linalg.norm(x-fx)
+    dL = L1-Lm - L
+    if dL > 0:
+        ks, kd = 300.0, 4000.0
+        Cs = L * exp(dL/L) - dL
+        dCs = (exp(dL) - 1.0) * (x-fx)/L1
+        a -= ks * Cs * dCs / M
+        a -= kd * dCs * np.dot(dCs, v) / M
+        fa += ks * Cs * dCs
+        fa += kd * dCs * np.dot(dCs, fv)
+
+    # frame constraint
+    r = np.linalg.norm(fx)
+    if r != 0.0:
+        # ks, kd = 2000000.0, 8000.0
+        # Cs = r*r
+        # dCs = 2*r * fx/r
+        # fa -= ks * Cs * dCs
+        # fa -= kd * dCs * np.dot(dCs, fv)
+        k = 1.2
+        ks, kd = 2000.0**k, 400.0
+        Cs = r**k
+        dCs = k*r**(k-1) * fx/r
+        fa -= ks * Cs * dCs
+        c = np.linalg.norm(fv) / 0.005
+        fa -= kd * dCs * c * np.dot(dCs, fv)
+
+    return [vx, vy, vz, fvx, fvy, *a, *fa[:2]]
+
+
+l0 = 1.03*L+Lm
+a0 = 20 * pi/180
+ts = np.arange(30*40) / 30
+xs = scipy.integrate.odeint(func,
+    [l0*sin(a0), 0, -l0*cos(a0), 0, 0, 0, 0, 0, 0, 0], ts)
+xs = np.round(xs, 3)
+
+#plt.plot(xs[:, 0], xs[:, 2])
+#plt.plot(ts, np.hypot(xs[:, 0], xs[:, 2]))
+plt.plot(ts, np.arctan2(xs[:, 0], -xs[:, 2]))
+plt.show()
