@@ -1,0 +1,183 @@
+print("[STATUS] Initializing...")
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+from scipy.optimize import curve_fit
+from scipy.stats import chisquare
+
+mpl.rcParams['legend.frameon'] = False
+mpl.rcParams['figure.autolayout'] = True
+
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica"]
+})
+
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Palatino"]
+})
+
+def Siddhartha_PahariGrid():
+    plt.minorticks_on()
+    plt.grid(color='grey',
+             which='minor',
+             linestyle=":",
+             linewidth=0.1,
+             )
+    plt.grid(color='black',
+             which='major',
+             linestyle=":",
+             linewidth=0.1,
+             )
+
+def underdamped_oscillator(t, Amp, gamma, omega, alpha):
+    exponential_factor = np.exp(-gamma * t)
+    cos_factor = Amp * np.cos(omega * t + alpha)
+    return exponential_factor * cos_factor
+
+def centralizeX(_data):
+    _data["x"] = np.mean(_data.x) - _data.x
+    return _data
+
+def wrapUp():
+    print("[STATUS] All Done!")
+    print('[STATUS] Stage 1...')
+
+# Load Data
+data1 = pd.read_csv('m1.csv')
+data2 = pd.read_csv('m2.csv')
+data3 = pd.read_csv('m3.csv')
+data4 = pd.read_csv('m4.csv')
+data5 = pd.read_csv('m5.csv')
+data6 = pd.read_csv('m6.csv')
+
+# Convert to real time
+m1Time = 2 * 60 + 24
+m2Time = 2 * 60 + 50
+m3Time = 4 * 60 + 3
+m4Time = 6 * 60 + 14
+m5Time = 7 * 60 + 17
+m6Time = 9 * 60 + 35
+
+data1['time'] = np.linspace(0, m1Time, len(data1.x))
+data2['time'] = np.linspace(0, m2Time, len(data2.x))
+data3['time'] = np.linspace(0, m3Time, len(data3.x))
+data4['time'] = np.linspace(0, m4Time, len(data4.x))
+data5['time'] = np.linspace(0, m5Time, len(data5.x))
+data6['time'] = np.linspace(0, m6Time, len(data6.x))
+
+data1 = centralizeX(data1)
+data2 = centralizeX(data2)
+data3 = centralizeX(data3)
+data4 = centralizeX(data4)
+data5 = centralizeX(data5)
+data6 = centralizeX(data6)
+
+data_list = [data1, data2, data3, data4, data5, data6]
+number_arr = [1, 2, 3, 4, 5, 6]
+t_violation_arr = [0, 0, 10, 0, 0, 0]
+tau_list = []
+gamma_list = []
+gamma_err_list = []
+
+for i in range(len(t_violation_arr)):
+    _data = data_list[i]
+    number = number_arr[i]
+    t_violation = t_violation_arr[i]
+    guess = [0.06, 0.002, (2 * np.pi / 3), 2]
+    popt, pcov = curve_fit(underdamped_oscillator,
+                           xdata=_data['time'],
+                           ydata=_data['x'],
+                           p0=guess
+                           )
+    omeg = popt[2]
+    gamma = popt[1]
+    Amp = popt[0]
+    phase = popt[3]
+    p_err = np.sqrt(np.diag(pcov))
+    omeg_err = p_err[2]
+    gamma_err = p_err[1]
+    Amp_err = p_err[0]
+    phase_err = p_err[3]
+    theory = underdamped_oscillator(_data['time'], Amp,
+                                    gamma, omeg, phase)
+    exp = Amp * np.exp(-gamma * _data['time'])
+    tau = 1 / gamma
+    tau_list.append(tau)
+    gamma_list.append(gamma)
+    gamma_err_list.append(gamma_err)
+
+    # Plot Figures
+    plt.figure(figsize=(6, 3))
+    utkarshGrid()
+    plt.plot(_data['time'], _data['x'], linewidth=0.75,
+             color="dodgerblue")
+    plt.plot(_data['time'], exp, linewidth=3,
+             color="goldenrod",
+             label=r"Decay: $e^{\gamma t}$, $\gamma=$" + f"{round(gamma, 4)}" + r"$\pm$" + f"{round(gamma_err, 6)}")
+    plt.plot(_data['time'], -exp, linewidth=3,
+             color="goldenrod")
+    plt.axvspan(0, t_violation, label="Beyond Small Angle Approximation", color="limegreen", alpha=0.3)
+    plt.ylabel("Position $r(t)$ (m)")
+    plt.xlabel(r"Time ($s$)")
+    plt.tight_layout()
+    plt.legend()
+    plt.title(f"Determining Underdamped Decay using Mass-{number}")
+    plt.savefig(f"fig4m{number}.pdf")
+    print(f"[STATUS] Mass{number}- Decay Constant: {round(tau, 3)} +/- {round(0, 9)}")
+
+print("[STATUS] Computing Damping Coefficient")
+masses = np.array([10, 25, 60, 90, 110, 160])  # g
+mass_err = np.ones(len(masses)) * 1  # g
+gamma_list = np.array(gamma_list)
+gamma_err_list = np.array(gamma_err_list)
+c = 2 * masses * gamma_list
+c_err = masses * np.sqrt((mass_err / masses) ** 2 +
+                         (gamma_err_list / gamma_list) ** 2)
+dTable = pd.DataFrame(columns=['Mass Number', 'Mass',
+                              "Gamma", "Damping Coefficient", "Damping Coefficient Error"])
+dTable['Mass Number'] = np.arange(1, 7, 1)
+dTable['Mass'] = masses
+dTable["Gamma"] = gamma_list
+dTable['Damping Coefficient'] = c
+dTable['Damping Coefficient Error'] = c_err
+
+plt.figure(figsize=(6, 4))
+utkarshGrid()
+c_mean = float(np.mean(c))
+plt.hlines(c_mean, min(dTable["Mass"]),
+           max(dTable["Mass"]),
+           label=r"Mean Damping Coefficient $\gamma$:" + f"{round(c_mean, 2)}",
+           color="forestgreen",
+           alpha=0.5, zorder=3)
+plt.errorbar(x=dTable["Mass"],
+             y=dTable["Damping Coefficient"],
+             yerr=dTable["Damping Coefficient Error"],
+             xerr=mass_err,
+             elinewidth=0.5,
+             capsize=2,
+             ecolor='black',
+             fmt='o',
+             label="Damping Coefficient by Mass",
+             color="darkorange",
+             zorder=1
+             )
+
+plt.scatter(dTable["Mass"][0], dTable["Damping Coefficient"][0],
+            color="red", label="Additional Friction (Ziplock-Bag)", zorder=2)
+plt.xlabel("Mass (g)")
+plt.ylabel("Damping Coefficeint (arbitrary units)")
+plt.legend()
+plt.title("Linear Damping Coefficient of a Homemade Simple Pendulum")
+plt.savefig("fig5.pdf")
+
+from tabulate import tabulate
+print(tabulate(dTable, tablefmt="latex",
+               floatfmt=(".0f", ".0f", ".4f", ".3f", ".4f"),
+               headers=list(dTable.columns),
+               showindex=False
+               ))
